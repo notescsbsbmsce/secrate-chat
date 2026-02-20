@@ -40,14 +40,15 @@ export default function Chat() {
     if (!user || !friendId || !privateKey) return;
 
     const channel = supabase
-      .channel(`messages-${friendId}`)
+      .channel(`chat-room-${friendId}`) // Unique channel for this specific pair
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
       }, async (payload) => {
         const msg = payload.new as any;
-        // Check if message belongs to this chat
+        
+        // Match messages for this specific conversation
         const isFromFriend = msg.sender_id === friendId && msg.receiver_id === user.id;
         const isFromMe = msg.sender_id === user.id && msg.receiver_id === friendId;
         
@@ -56,16 +57,14 @@ export default function Chat() {
         try {
           const text = await decryptMessage(msg.ciphertext, msg.encrypted_key, msg.iv, privateKey, user.id);
           setMessages(prev => {
+            // Prevent duplicates
             if (prev.find(m => m.id === msg.id)) return prev;
             return [...prev, { id: msg.id, sender_id: msg.sender_id, text, created_at: msg.created_at, read_at: msg.read_at }];
           });
-          // Mark as read if we were the receiver
           if (isFromFriend) markAsRead([msg.id]);
-        } catch {
-          setMessages(prev => {
-            if (prev.find(m => m.id === msg.id)) return prev;
-            return [...prev, { id: msg.id, sender_id: msg.sender_id, text: '🔒 Unable to decrypt', created_at: msg.created_at, read_at: msg.read_at }];
-          });
+        } catch (e) {
+          console.error("Decryption error:", e);
+          setMessages(prev => [...prev, { id: msg.id, sender_id: msg.sender_id, text: '🔒 Encrypted message', created_at: msg.created_at, read_at: msg.read_at }]);
         }
       })
       .on('postgres_changes', {
@@ -159,7 +158,12 @@ export default function Chat() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !friendProfile?.public_key || sending) return;
+    if (!newMessage.trim() || sending) return;
+    
+    if (!friendProfile?.public_key) {
+      toast.error("This user hasn't set up encryption yet.");
+      return;
+    }
 
     setSending(true);
     try {
