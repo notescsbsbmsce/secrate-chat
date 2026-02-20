@@ -39,8 +39,10 @@ export default function Chat() {
   useEffect(() => {
     if (!user || !friendId || !privateKey) return;
 
+    // Create a stable channel name based on both user IDs (sorted alphabetically)
+    const roomId = [user.id, friendId].sort().join('-');
     const channel = supabase
-      .channel(`chat-room-${friendId}`) // Unique channel for this specific pair
+      .channel(`chat:${roomId}`) 
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -57,14 +59,17 @@ export default function Chat() {
         try {
           const text = await decryptMessage(msg.ciphertext, msg.encrypted_key, msg.iv, privateKey, user.id);
           setMessages(prev => {
-            // Prevent duplicates
             if (prev.find(m => m.id === msg.id)) return prev;
             return [...prev, { id: msg.id, sender_id: msg.sender_id, text, created_at: msg.created_at, read_at: msg.read_at }];
           });
-          if (isFromFriend) markAsRead([msg.id]);
+          if (msg.sender_id === friendId) markAsRead([msg.id]);
         } catch (e) {
-          console.error("Decryption error:", e);
-          setMessages(prev => [...prev, { id: msg.id, sender_id: msg.sender_id, text: '🔒 Encrypted message', created_at: msg.created_at, read_at: msg.read_at }]);
+          console.error("Encryption mismatch or error:", e);
+          // Only show 'Encrypted' if it's NOT already in our list (sender already has the plaintext)
+          setMessages(prev => {
+            if (prev.find(m => m.id === msg.id)) return prev;
+            return [...prev, { id: msg.id, sender_id: msg.sender_id, text: '🔒 Encrypted message', created_at: msg.created_at, read_at: msg.read_at }];
+          });
         }
       })
       .on('postgres_changes', {
