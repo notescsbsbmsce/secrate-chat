@@ -39,6 +39,7 @@ export default function Auth() {
 
       // Store encrypted private key in IndexedDB
       await storePrivateKey(data.user.id, keyPair.privateKey, password);
+      localStorage.setItem('_kp', password);
 
       // Store public key in profile
       await supabase.from('profiles').update({ public_key: publicKeyStr }).eq('user_id', data.user.id);
@@ -59,8 +60,8 @@ export default function Auth() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Password is needed to decrypt private key later - stored in memory only during session
-      sessionStorage.setItem('_kp', password);
+      // Password is needed to decrypt private key later - stored locally
+      localStorage.setItem('_kp', password);
       toast.success('Welcome back!');
       navigate('/');
     } catch (err: any) {

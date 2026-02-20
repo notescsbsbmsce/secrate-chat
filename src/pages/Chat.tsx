@@ -101,7 +101,7 @@ export default function Chat() {
     setMyProfile(mProfile);
 
     // Retrieve private key
-    const password = sessionStorage.getItem('_kp');
+    const password = localStorage.getItem('_kp');
     if (password) {
       try {
         const pk = await retrievePrivateKey(user!.id, password);
